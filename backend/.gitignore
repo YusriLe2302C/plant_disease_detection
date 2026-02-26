@@ -1,0 +1,11 @@
+node_modules/
+uploads/
+*.h5
+*.json
+.env
+.DS_Store
+__pycache__/
+*.pyc
+ai_models/dataset/
+ai_models/best_model.h5
+ai_models/plant_disease_efficientnet.h5
