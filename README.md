@@ -539,3 +539,5 @@ For issues and questions:
 ---
 
 **Made with ❤️ for sustainable agriculture**
+#   p l a n t _ d i s e a s e _ d e t e c t i o n  
+ 
