@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Leaf, Upload, History, Radio } from 'lucide-react';
+import { Leaf, Upload, History, Radio, Camera } from 'lucide-react';
 
 const Navbar = () => {
   const location = useLocation();
@@ -7,6 +7,7 @@ const Navbar = () => {
   const links = [
     { to: '/', label: 'Home', icon: Leaf },
     { to: '/upload', label: 'Upload', icon: Upload },
+    { to: '/live-scan', label: 'Live Scan', icon: Camera },
     { to: '/history', label: 'History', icon: History },
     { to: '/esp-monitor', label: 'ESP Monitor', icon: Radio },
   ];

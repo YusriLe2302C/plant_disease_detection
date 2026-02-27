@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import anime from 'animejs';
-import { Sparkles, Zap, Shield, TrendingUp, Upload, Brain, Leaf, Award, Users, Globe, ArrowRight } from 'lucide-react';
+import { Sparkles, Zap, Shield, TrendingUp, Upload, Brain, Leaf, Award, Users, Globe, ArrowRight, Camera } from 'lucide-react';
 import AnimatedBackground from '../components/AnimatedBackground';
 import ImageGallery from '../components/ImageGallery';
 import { getHistory } from '../utils/api';
@@ -107,8 +107,15 @@ const LandingPage = () => {
               className="group px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl font-semibold text-lg text-white hover:scale-105 transition-all glow-green shadow-xl flex items-center justify-center space-x-2"
             >
               <Upload className="w-5 h-5" />
-              <span>Start Detection</span>
+              <span>Upload Image</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+            <button
+              onClick={() => navigate('/live-scan')}
+              className="group px-8 py-4 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-xl font-semibold text-lg text-white hover:scale-105 transition-all shadow-xl flex items-center justify-center space-x-2"
+            >
+              <Camera className="w-5 h-5" />
+              <span>Live Camera</span>
             </button>
             <button
               onClick={() => navigate('/history')}

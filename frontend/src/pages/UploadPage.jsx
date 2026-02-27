@@ -195,7 +195,7 @@ const UploadPage = () => {
             )}
           </div>
 
-          <div className="mt-8 grid md:grid-cols-3 gap-4">
+          {/* <div className="mt-8 grid md:grid-cols-3 gap-4">
             {[
               { icon: CheckCircle2, text: '95%+ accuracy rate', color: 'green' },
               { icon: Loader2, text: 'Results in 2-3 seconds', color: 'blue' },
@@ -206,7 +206,7 @@ const UploadPage = () => {
                 <span className="text-sm text-gray-700 font-medium">{item.text}</span>
               </div>
             ))}
-          </div>
+          </div> */}
 
           <div className="mt-8 glass rounded-2xl p-6 card-shadow">
             <div className="flex items-start space-x-3">

@@ -53,11 +53,17 @@ router.post('/upload', upload.single('image'), async (req, res) => {
 
     let aiAnalysis = null;
     try {
+      const severity_percent = prediction.severity_percent || null;
+      console.log(`🤖 Calling Ollama for: ${prediction.disease} (${(prediction.confidence * 100).toFixed(1)}%)`);
+      
       aiAnalysis = await ollamaService.analyzeDisease(
         prediction.disease,
         prediction.confidence,
-        scenario
+        scenario,
+        severity_percent
       );
+      
+      console.log('✅ Ollama response received');
       
       // Sanitize actions and prevention to ensure they are string arrays
       if (aiAnalysis.actions && Array.isArray(aiAnalysis.actions)) {
@@ -71,7 +77,8 @@ router.post('/upload', upload.single('image'), async (req, res) => {
         );
       }
     } catch (aiError) {
-      console.error('AI analysis failed:', aiError);
+      console.error('❌ AI analysis failed:', aiError.message);
+      console.log('📋 Using fallback response');
       aiAnalysis = ollamaService.getFallbackResponse(
         prediction.disease,
         prediction.confidence,

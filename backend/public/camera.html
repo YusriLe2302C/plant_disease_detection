@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera Uploader</title>
+  <style>
+    body { margin: 0; background: #000; color: #0f0; font-family: monospace; }
+    #status { position: fixed; top: 10px; left: 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div id="status">Initializing...</div>
+<video id="video" autoplay playsinline style="display:none;"></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+// Auto-detect server - works on same network
+const SERVER = window.location.hostname === 'localhost' 
+  ? "http://localhost:5001/camera/upload"
+  : `http://${window.location.hostname}:5001/camera/upload`;
+
+async function start() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+
+    const video = document.getElementById("video");
+    video.srcObject = stream;
+    
+    document.getElementById("status").textContent = "Camera active - uploading every 3s";
+    
+    setInterval(captureAndSend, 3000);
+  } catch (e) {
+    document.getElementById("status").textContent = "Error: " + e.message;
+  }
+}
+
+async function captureAndSend() {
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+
+  if (video.readyState !== 4) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(async (blob) => {
+    const formData = new FormData();
+    formData.append("image", blob, "frame.jpg");
+
+    try {
+      const res = await fetch(SERVER, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      document.getElementById("status").textContent = 
+        `Sent: ${data.disease || 'processing'} (${(data.confidence * 100).toFixed(1)}%)`;
+    } catch (e) {
+      document.getElementById("status").textContent = "Upload failed";
+    }
+  }, "image/jpeg", 0.7);
+}
+
+start();
+</script>
+</body>
+</html>

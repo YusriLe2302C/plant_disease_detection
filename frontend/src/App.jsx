@@ -7,6 +7,7 @@ import UploadPage from './pages/UploadPage';
 import ResultPage from './pages/ResultPage';
 import HistoryPage from './pages/HistoryPage';
 import EspMonitorPage from './pages/EspMonitorPage';
+import LiveScan from './pages/LiveScan';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="/result" element={<ResultPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/esp-monitor" element={<EspMonitorPage />} />
+            <Route path="/live-scan" element={<LiveScan />} />
           </Routes>
         </main>
         <Footer />

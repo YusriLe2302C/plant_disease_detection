@@ -8,6 +8,8 @@ const SYSTEM_PROMPT = `You are PlantCare AI, an advanced agricultural disease in
 
 You MUST respond ONLY in valid JSON format. No markdown, no explanations outside JSON.
 
+IMPORTANT: All array items MUST be simple strings, NOT objects or nested JSON.
+
 Severity Logic:
 - confidence ≥ 0.85 → severity = "High"
 - 0.60 ≤ confidence < 0.85 → severity = "Moderate"  
@@ -26,28 +28,28 @@ Output Format (STRICT):
   "severity": "...",
   "summary": "2-3 sentences about plant impact and disease characteristics",
   "actions": [
-    "Immediate step 1 with specific details",
-    "Treatment option 2 (include organic/chemical options)",
-    "Management step 3 with application rates if applicable",
-    "Monitoring and follow-up step 4",
-    "Long-term control measure 5"
+    "Apply sulfur-based fungicide at 0.5-1.0% every 7-10 days for 2-3 applications",
+    "Use copper-based fungicide like Bordeaux mixture at 1-2% every 7-10 days",
+    "Implement integrated pest management with crop rotation and pruning",
+    "Remove infected plant material and improve air circulation",
+    "Monitor plants daily and reapply treatment as needed"
   ],
   "prevention": [
-    "Cultural practice 1 with specific details",
-    "Preventive treatment 2 (include product names if relevant)",
-    "Environmental control 3",
-    "Crop rotation or resistant variety recommendation 4",
-    "Monitoring and early detection tip 5"
+    "Rotate crops with non-host plants like corn or soybeans",
+    "Apply preventive copper-based fungicide before bloom and after harvest",
+    "Maintain good air circulation and remove weeds regularly",
+    "Use disease-resistant varieties when available",
+    "Practice proper sanitation and dispose of infected material"
   ]
 }
 
 For chemical recommendations:
-- Include specific fungicide/pesticide classes (e.g., "Apply copper-based fungicide like Bordeaux mixture")
-- Mention application rates and timing
-- Always suggest organic alternatives first for home gardeners
-- Include safety precautions for chemical use
+- Include specific fungicide/pesticide names and application rates
+- Mention timing and frequency
+- Always suggest organic alternatives for home gardeners
+- Include safety precautions
 
-Respond ONLY with valid JSON.`;
+Respond ONLY with valid JSON. Each action and prevention item must be a complete sentence string.`;
 
 class OllamaService {
   
@@ -84,11 +86,12 @@ class OllamaService {
     }
   }
 
-  async analyzeDisease(disease, confidence, scenario = 'farm_monitoring') {
+  async analyzeDisease(disease, confidence, scenario = 'farm_monitoring', severity_percent = null) {
     const prompt = `Analyze this plant disease detection:
 
 Detected Disease: ${disease}
-Confidence: ${confidence}
+Confidence: ${(confidence * 100).toFixed(1)}%
+${severity_percent !== null ? `Infection Severity: ${severity_percent}% (detected by OpenCV analysis)` : ''}
 Scenario: ${scenario}
 
 Provide comprehensive disease management guidance including:
@@ -115,22 +118,34 @@ Provide scenario-aware guidance in JSON format.`;
       // Validate and sanitize actions and prevention arrays
       if (parsed.actions && Array.isArray(parsed.actions)) {
         parsed.actions = parsed.actions.map(action => {
-          if (typeof action === 'string') return action;
-          if (typeof action === 'object') {
-            return `${action.step || action.action || ''}: ${action.details || action.description || JSON.stringify(action)}`;
+          if (typeof action === 'string') {
+            // Remove JSON string artifacts
+            return action.replace(/^[^:]*:\s*\{.*?\}\s*/, '').trim() || action;
+          }
+          if (typeof action === 'object' && action !== null) {
+            // Extract meaningful text from object
+            const step = action.step || action.action || action.treatment || '';
+            const details = action.details || action.description || action.option || '';
+            return details || step || JSON.stringify(action);
           }
           return String(action);
-        });
+        }).filter(a => a && a.length > 0);
       }
       
       if (parsed.prevention && Array.isArray(parsed.prevention)) {
         parsed.prevention = parsed.prevention.map(prev => {
-          if (typeof prev === 'string') return prev;
-          if (typeof prev === 'object') {
-            return `${prev.strategy || prev.tip || ''}: ${prev.details || prev.description || JSON.stringify(prev)}`;
+          if (typeof prev === 'string') {
+            // Remove JSON string artifacts
+            return prev.replace(/^[^:]*:\s*\{.*?\}\s*/, '').trim() || prev;
+          }
+          if (typeof prev === 'object' && prev !== null) {
+            // Extract meaningful text from object
+            const practice = prev.practice || prev.strategy || prev.tip || prev.treatment || '';
+            const details = prev.details || prev.description || '';
+            return practice || details || JSON.stringify(prev);
           }
           return String(prev);
-        });
+        }).filter(p => p && p.length > 0);
       }
       
       // Validate required fields
