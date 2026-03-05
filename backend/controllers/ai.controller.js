@@ -156,6 +156,8 @@ class AIController {
     try {
       const { message, scenario } = req.body;
 
+      console.log('💬 Chat request:', { message, scenario });
+
       if (!message) {
         return res.status(400).json({
           success: false,
@@ -174,7 +176,9 @@ class AIController {
 
       const prompt = `${scenarioContext[selectedScenario]}\n\nUser: ${message}\n\nProvide a helpful, natural response. You can discuss agriculture, plants, farming, weather, equipment, general advice, or even have casual conversation. Keep responses under 200 words and be conversational.`;
 
+      console.log('🤖 Calling Ollama for chat...');
       const result = await ollamaService.generate(prompt, { temperature: 0.8 });
+      console.log('✅ Ollama chat response received');
 
       let responseText = result.trim();
       
@@ -196,12 +200,12 @@ class AIController {
       });
 
     } catch (error) {
-      console.error('Chat error:', error);
-      return res.status(500).json({
-        success: false,
-        message: error.message,
+      console.error('❌ Chat error:', error.message);
+      console.error('Full error:', error);
+      return res.json({
+        success: true,
         data: {
-          response: 'I apologize, but I\'m having trouble connecting to the AI service. Please ensure Ollama is running and try again.'
+          response: `I'm having trouble connecting to the AI service. Error: ${error.message}. Please make sure Ollama is running with: ollama serve`
         }
       });
     }

@@ -69,7 +69,6 @@ class OllamaService {
           }
         },
         {
-          timeout: TIMEOUT,
           headers: { 'Content-Type': 'application/json' }
         }
       );
@@ -78,9 +77,6 @@ class OllamaService {
     } catch (error) {
       if (error.code === 'ECONNREFUSED') {
         throw new Error('Ollama service is not running. Please start Ollama.');
-      }
-      if (error.code === 'ETIMEDOUT') {
-        throw new Error('Ollama request timed out. Try again.');
       }
       throw new Error(`Ollama error: ${error.message}`);
     }

@@ -6,8 +6,12 @@ from torchvision import transforms
 from PIL import Image
 import io
 import json
+import numpy as np
+import cv2
 from timm import create_model
 import os
+from yolo_leaf_detector import detect_leaf_yolo
+import base64
 
 app = Flask(__name__)
 CORS(app)
@@ -28,40 +32,59 @@ print("📊 Total classes loaded:", num_classes)
 # ================= LOAD MODEL =================
 def load_model():
     model = create_model('efficientnet_b0', pretrained=False, num_classes=num_classes)
-
-    model_files = [
-        "best_model.pth",
-        "final_model.pth",
-        "plant_disease_efficientnet.pt",
-        "best_model.pt"
-    ]
-
-    loaded = False
-    for mf in model_files:
-        if os.path.exists(mf):
-            try:
-                model.load_state_dict(torch.load(mf, map_location=DEVICE))
-                print(f"✅ Loaded model: {mf}")
-                loaded = True
-                break
-            except Exception as e:
-                print(f"⚠️ Failed loading {mf}: {e}")
-
-    if not loaded:
-        raise RuntimeError("❌ No valid model file found!")
-
+    model.load_state_dict(torch.load('best_model.pth', map_location=DEVICE))
     model.to(DEVICE)
     model.eval()
+    print("✅ Loaded model: best_model.pth")
     return model
 
 model = load_model()
 print("✅ Model ready")
 
+# ================= PREPROCESSING =================
+def remove_background_and_enhance(image_bgr):
+    """Remove background and enhance leaf image"""
+    # Convert to RGB
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    
+    # Create mask using GrabCut
+    mask = np.zeros(image_bgr.shape[:2], np.uint8)
+    bgd_model = np.zeros((1, 65), np.float64)
+    fgd_model = np.zeros((1, 65), np.float64)
+    
+    h, w = image_bgr.shape[:2]
+    rect = (10, 10, w-10, h-10)
+    
+    cv2.grabCut(image_bgr, mask, rect, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
+    
+    # Apply mask
+    result = image_bgr * mask2[:, :, np.newaxis]
+    
+    # Replace background with white
+    result[mask2 == 0] = [255, 255, 255]
+    
+    # Enhance sharpness
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(result, -1, kernel)
+    
+    # Denoise
+    denoised = cv2.fastNlMeansDenoisingColored(sharpened, None, 10, 10, 7, 21)
+    
+    # Enhance contrast
+    lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    l = clahe.apply(l)
+    enhanced = cv2.merge([l, a, b])
+    enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+    
+    return enhanced
+
 # ================= TRANSFORMS =================
 transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((1024, 1024)),
     transforms.ToTensor(),
-
 ])
 
 
@@ -77,9 +100,34 @@ def predict():
         file = request.files['image']
         file_bytes = file.read()
 
-        # ---- classification ----
-        img = Image.open(io.BytesIO(file_bytes)).convert('RGB')
-        img_tensor = transform(img).unsqueeze(0).to(DEVICE)
+        np_img = np.frombuffer(file_bytes, np.uint8)
+        image_bgr = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+        
+        if image_bgr is None:
+            return jsonify({'error': 'Invalid image format'}), 400
+
+        # YOLO leaf detection
+        yolo_result = detect_leaf_yolo(image_bgr)
+        
+        if not yolo_result['is_valid']:
+            return jsonify({
+                'error': 'No plant leaf detected in image',
+                'message': yolo_result['message'],
+                'confidence': yolo_result['confidence'],
+                'suggestion': 'Please upload a clear image of a plant leaf'
+            }), 400
+
+        # Use cropped leaf for classification
+        cropped_leaf = yolo_result['cropped_leaf']
+        annotated_img = yolo_result['annotated_image']
+        
+        # Remove background and enhance
+        enhanced_leaf = remove_background_and_enhance(cropped_leaf)
+        
+        # Convert to PIL
+        enhanced_rgb = cv2.cvtColor(enhanced_leaf, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(enhanced_rgb)
+        img_tensor = transform(img_pil).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
             outputs = model(img_tensor)
@@ -87,12 +135,18 @@ def predict():
             confidence, predicted_class_idx = torch.max(probs, 1)
 
         disease = idx_to_class[int(predicted_class_idx.item())]
+        
+        # Encode annotated image at maximum quality
+        _, buffer = cv2.imencode('.jpg', annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 100])
+        annotated_base64 = base64.b64encode(buffer).decode('utf-8')
 
         return jsonify({
             'disease': disease,
             'confidence': round(float(confidence.item()), 4),
             'model': 'EfficientNetB0-PyTorch',
-            'device': str(DEVICE)
+            'device': str(DEVICE),
+            'yolo_confidence': round(yolo_result['confidence'], 4),
+            'annotated_image': annotated_base64
         })
 
     except Exception as e:
@@ -109,10 +163,31 @@ def camera_upload():
 
     try:
         img_bytes = request.files['image'].read()
+        
+        np_img = np.frombuffer(img_bytes, np.uint8)
+        image_bgr = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+        
+        if image_bgr is None:
+            return jsonify({'error': 'invalid image'}), 400
+        
+        # YOLO detection
+        yolo_result = detect_leaf_yolo(image_bgr)
+        
+        if not yolo_result['is_valid']:
+            return jsonify({
+                'error': 'No leaf detected',
+                'message': yolo_result['message']
+            }), 400
 
-        # ---- classification ----
-        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
-        img_tensor = transform(img).unsqueeze(0).to(DEVICE)
+        # Use cropped leaf
+        cropped_leaf = yolo_result['cropped_leaf']
+        
+        # Remove background and enhance
+        enhanced_leaf = remove_background_and_enhance(cropped_leaf)
+        
+        cropped_rgb = cv2.cvtColor(enhanced_leaf, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(cropped_rgb)
+        img_tensor = transform(img_pil).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
             outputs = model(img_tensor)
@@ -120,12 +195,11 @@ def camera_upload():
             conf, pred = torch.max(probs, 1)
 
         disease = idx_to_class[pred.item()]
-        confidence = float(conf.item())
 
         return jsonify({
             'status': 'received',
             'disease': disease,
-            'confidence': round(confidence, 4),
+            'confidence': round(float(conf.item()), 4),
             'device': str(DEVICE)
         })
 

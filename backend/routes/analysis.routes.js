@@ -114,6 +114,8 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       message: 'Analysis complete',
       disease: prediction.disease,
       confidence: prediction.confidence,
+      yolo_confidence: prediction.yolo_confidence,
+      annotated_image: prediction.annotated_image,
       model: prediction.model,
       processing_time: processingTime,
       image_url: `/${imagePath}`,

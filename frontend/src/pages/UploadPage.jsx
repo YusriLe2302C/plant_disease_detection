@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import anime from 'animejs';
-import { Upload, Image as ImageIcon, X, Loader2, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Upload, Image as ImageIcon, X, Loader2, CheckCircle2, AlertTriangle, Info, XCircle, Leaf } from 'lucide-react';
 import { uploadImage } from '../utils/api';
 import AnimatedBackground from '../components/AnimatedBackground';
 
@@ -11,6 +11,8 @@ const UploadPage = () => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
   const uploadRef = useRef(null);
   const progressRef = useRef(null);
@@ -88,13 +90,78 @@ const UploadPage = () => {
     } catch (error) {
       clearInterval(progressInterval);
       setLoading(false);
-      alert('Upload failed: ' + (error.response?.data?.message || error.message));
+      setProgress(0);
+      
+      // Check if it's a leaf detection error
+      const errorMsg = error.response?.data?.message || error.message;
+      
+      if (errorMsg.includes('No plant leaf detected') || errorMsg.includes('NOT_A_LEAF') || errorMsg.includes('Insufficient green')) {
+        // Clear preview and file
+        setFile(null);
+        setPreview(null);
+        
+        // Show custom modal
+        setErrorMessage('leaf');
+        setShowErrorModal(true);
+      } else {
+        setErrorMessage('general');
+        setShowErrorModal(true);
+      }
     }
   };
 
   return (
     <div className="relative min-h-screen">
       <AnimatedBackground />
+      
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
+            <div className="flex flex-col items-center text-center">
+              {errorMessage === 'leaf' ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                    <XCircle className="w-8 h-8 text-red-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">No Plant Leaf Detected</h3>
+                  <p className="text-gray-600 mb-6">
+                    The uploaded image does not appear to contain a plant leaf.
+                  </p>
+                  <div className="bg-green-50 rounded-xl p-4 mb-6 w-full">
+                    <div className="flex items-start space-x-2 mb-3">
+                      <Leaf className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm font-semibold text-green-900">Please upload:</p>
+                    </div>
+                    <ul className="text-sm text-green-800 space-y-2 text-left ml-7">
+                      <li>✓ Clear image of a plant leaf</li>
+                      <li>✓ Good lighting conditions</li>
+                      <li>✓ Leaf fills most of the frame</li>
+                      <li>✓ Avoid humans, objects, or non-plant items</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center mb-4">
+                    <AlertTriangle className="w-8 h-8 text-orange-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Upload Failed</h3>
+                  <p className="text-gray-600 mb-6">
+                    Something went wrong. Please try again.
+                  </p>
+                </>
+              )}
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="w-full py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold hover:scale-105 transition-all shadow-lg"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-20">
         <div ref={uploadRef}>

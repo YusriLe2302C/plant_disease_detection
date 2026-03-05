@@ -38,12 +38,30 @@ const ChatbotIcon = () => {
     setLoading(true);
 
     try {
+      console.log('Sending message:', input);
       const response = await chatWithAI(input, scenario);
+      console.log('Full response:', response);
+      console.log('Response data:', response.data);
+      
+      // Extract the actual response text
+      let aiResponse = 'I apologize, but I couldn\'t process that request.';
+      
+      if (response && response.data) {
+        if (response.data.data && response.data.data.response) {
+          aiResponse = response.data.data.response;
+        } else if (response.data.response) {
+          aiResponse = response.data.response;
+        }
+      }
+      
+      console.log('AI Response:', aiResponse);
+      
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: response.data.response || 'I apologize, but I couldn\'t process that request.'
+        content: aiResponse
       }]);
     } catch (error) {
+      console.error('Chat error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: 'Sorry, I\'m having trouble connecting. Please ensure the AI service is running.'

@@ -19,6 +19,15 @@ async function runPrediction(imagePath) {
     if (error.code === 'ECONNREFUSED') {
       throw new Error('ML service not running. Start ml_service.py on port 5001');
     }
+    
+    // Handle leaf detection rejection
+    if (error.response && error.response.status === 400 && error.response.data) {
+      const errorData = error.response.data;
+      if (errorData.error && errorData.error.includes('No plant leaf detected')) {
+        throw new Error(`NOT_A_LEAF: ${errorData.message || 'Please upload a clear image of a plant leaf'}`);
+      }
+    }
+    
     throw new Error(`ML prediction failed: ${error.message}`);
   }
 }

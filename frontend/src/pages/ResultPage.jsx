@@ -231,9 +231,11 @@ const ResultPage = () => {
             <div className="glass rounded-3xl p-8 card-shadow">
               <div className="relative rounded-2xl overflow-hidden mb-6 group shadow-xl">
                 <img
-                  src={result.image_url 
-                    ? `http://localhost:5000${result.image_url}` 
-                    : 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&h=600&fit=crop'
+                  src={result.annotated_image
+                    ? `data:image/jpeg;base64,${result.annotated_image}`
+                    : result.image_url 
+                      ? `http://localhost:5000${result.image_url}` 
+                      : 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&h=600&fit=crop'
                   }
                   alt="Analyzed plant"
                   className="w-full h-96 object-cover"
@@ -242,7 +244,9 @@ const ResultPage = () => {
                   }}
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <p className="text-white font-semibold">Analyzed Image</p>
+                  <p className="text-white font-semibold">
+                    {result.annotated_image ? 'YOLO Leaf Detection' : 'Analyzed Image'}
+                  </p>
                 </div>
               </div>
             </div>
