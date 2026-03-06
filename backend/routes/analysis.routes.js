@@ -49,6 +49,14 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     const scenario = req.body.scenario || 'farm_monitoring';
 
     const prediction = await runPrediction(imagePath);
+    console.log('🔍 ML Prediction:', prediction);
+    
+    // Ensure confidence is a valid number
+    if (!prediction.confidence || isNaN(prediction.confidence)) {
+      prediction.confidence = 0.5; // Default fallback
+      console.log('⚠️ Using fallback confidence: 0.5');
+    }
+    
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
     let aiAnalysis = null;
@@ -116,6 +124,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       confidence: prediction.confidence,
       yolo_confidence: prediction.yolo_confidence,
       annotated_image: prediction.annotated_image,
+      processed_image: prediction.processed_image,
       model: prediction.model,
       processing_time: processingTime,
       image_url: `/${imagePath}`,

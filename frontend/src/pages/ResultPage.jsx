@@ -245,10 +245,23 @@ const ResultPage = () => {
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <p className="text-white font-semibold">
-                    {result.annotated_image ? 'YOLO Leaf Detection' : 'Analyzed Image'}
+                    {result.annotated_image ? 'YOLO Leaf Detection' : 'Original Image'}
                   </p>
                 </div>
               </div>
+              
+              {result.processed_image && (
+                <div className="relative rounded-2xl overflow-hidden group shadow-xl">
+                  <img
+                    src={`data:image/jpeg;base64,${result.processed_image}`}
+                    alt="YOLO processed leaf"
+                    className="w-full h-64 object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <p className="text-white font-semibold">YOLO Processed Leaf</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-6">

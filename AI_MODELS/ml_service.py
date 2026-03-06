@@ -10,7 +10,7 @@ import numpy as np
 import cv2
 from timm import create_model
 import os
-from yolo_leaf_detector import detect_leaf_yolo
+# from yolo_leaf_detector import detect_leaf_yolo
 import base64
 
 app = Flask(__name__)
@@ -41,7 +41,7 @@ def load_model():
 model = load_model()
 print("✅ Model ready")
 
-# ================= PREPROCESSING =================
+# # ================= PREPROCESSING =================
 def remove_background_and_enhance(image_bgr):
     """Remove background and enhance leaf image"""
     # Convert to RGB
@@ -106,27 +106,9 @@ def predict():
         if image_bgr is None:
             return jsonify({'error': 'Invalid image format'}), 400
 
-        # YOLO leaf detection
-        yolo_result = detect_leaf_yolo(image_bgr)
-        
-        if not yolo_result['is_valid']:
-            return jsonify({
-                'error': 'No plant leaf detected in image',
-                'message': yolo_result['message'],
-                'confidence': yolo_result['confidence'],
-                'suggestion': 'Please upload a clear image of a plant leaf'
-            }), 400
-
-        # Use cropped leaf for classification
-        cropped_leaf = yolo_result['cropped_leaf']
-        annotated_img = yolo_result['annotated_image']
-        
-        # Remove background and enhance
-        enhanced_leaf = remove_background_and_enhance(cropped_leaf)
-        
         # Convert to PIL
-        enhanced_rgb = cv2.cvtColor(enhanced_leaf, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(enhanced_rgb)
+        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(image_rgb)
         img_tensor = transform(img_pil).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
@@ -136,8 +118,8 @@ def predict():
 
         disease = idx_to_class[int(predicted_class_idx.item())]
         
-        # Encode annotated image at maximum quality
-        _, buffer = cv2.imencode('.jpg', annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 100])
+        # Encode original image
+        _, buffer = cv2.imencode('.jpg', image_bgr, [cv2.IMWRITE_JPEG_QUALITY, 100])
         annotated_base64 = base64.b64encode(buffer).decode('utf-8')
 
         return jsonify({
@@ -145,7 +127,6 @@ def predict():
             'confidence': round(float(confidence.item()), 4),
             'model': 'EfficientNetB0-PyTorch',
             'device': str(DEVICE),
-            'yolo_confidence': round(yolo_result['confidence'], 4),
             'annotated_image': annotated_base64
         })
 
@@ -170,23 +151,9 @@ def camera_upload():
         if image_bgr is None:
             return jsonify({'error': 'invalid image'}), 400
         
-        # YOLO detection
-        yolo_result = detect_leaf_yolo(image_bgr)
-        
-        if not yolo_result['is_valid']:
-            return jsonify({
-                'error': 'No leaf detected',
-                'message': yolo_result['message']
-            }), 400
-
-        # Use cropped leaf
-        cropped_leaf = yolo_result['cropped_leaf']
-        
-        # Remove background and enhance
-        enhanced_leaf = remove_background_and_enhance(cropped_leaf)
-        
-        cropped_rgb = cv2.cvtColor(enhanced_leaf, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(cropped_rgb)
+        # Convert to PIL
+        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(image_rgb)
         img_tensor = transform(img_pil).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
