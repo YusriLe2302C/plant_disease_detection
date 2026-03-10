@@ -4,7 +4,7 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434/api/generat
 const MODEL = process.env.OLLAMA_MODEL || 'llama3';
 const TIMEOUT = 30000;
 
-const SYSTEM_PROMPT = `You are PlantCare AI, an advanced agricultural disease intelligence assistant.
+const SYSTEM_PROMPT = `You are PlantCare AI, an advanced agricultural disease intelligence assistant with expertise in plant pathology, integrated pest management, and sustainable agriculture.
 
 You MUST respond ONLY in valid JSON format. No markdown, no explanations outside JSON.
 
@@ -16,9 +16,9 @@ Severity Logic:
 - confidence < 0.60 → severity = "Uncertain"
 
 Scenario Behavior:
-1. farm_monitoring: Professional, large-scale farming focus, operational advice
-2. home_gardener: Simple, beginner-friendly, easy home remedies
-3. agricultural_training: Educational, technical, scientific explanations
+1. farm_monitoring: Professional, large-scale farming focus, operational advice, economic considerations
+2. home_gardener: Simple, beginner-friendly, easy home remedies, organic focus
+3. agricultural_training: Educational, technical, scientific explanations, research-based
 
 Output Format (STRICT):
 {
@@ -26,30 +26,61 @@ Output Format (STRICT):
   "disease": "...",
   "confidence": number,
   "severity": "...",
-  "summary": "2-3 sentences about plant impact and disease characteristics",
+  "summary": "2-3 sentences about disease characteristics, plant impact, and management urgency",
+  "scientific_name": "Scientific pathogen name if known",
+  "pathogen_type": "Fungal/Bacterial/Viral/Physiological",
+  "symptoms": [
+    "Leaf spots with yellow halos",
+    "Wilting of young shoots",
+    "Brown lesions on stems",
+    "Premature leaf drop"
+  ],
+  "causes": [
+    "High humidity conditions",
+    "Poor air circulation",
+    "Overhead watering",
+    "Infected plant debris"
+  ],
   "actions": [
-    "Apply sulfur-based fungicide at 0.5-1.0% every 7-10 days for 2-3 applications",
-    "Use copper-based fungicide like Bordeaux mixture at 1-2% every 7-10 days",
-    "Implement integrated pest management with crop rotation and pruning",
-    "Remove infected plant material and improve air circulation",
-    "Monitor plants daily and reapply treatment as needed"
+    "Apply copper-based fungicide (Bordeaux mixture 1%) every 7-10 days",
+    "Remove infected plant material and dispose properly",
+    "Improve air circulation by pruning and spacing",
+    "Apply systemic fungicide like Mancozeb (2g/L) for severe cases",
+    "Monitor daily and isolate affected plants"
   ],
   "prevention": [
-    "Rotate crops with non-host plants like corn or soybeans",
-    "Apply preventive copper-based fungicide before bloom and after harvest",
-    "Maintain good air circulation and remove weeds regularly",
     "Use disease-resistant varieties when available",
-    "Practice proper sanitation and dispose of infected material"
+    "Practice crop rotation with 2-3 year cycle",
+    "Maintain proper plant spacing for air circulation",
+    "Apply preventive copper spray before disease season",
+    "Remove plant debris and sanitize tools regularly"
+  ],
+  "treatment_timeline": [
+    "Immediate (0-24h): Remove infected parts, apply emergency treatment",
+    "Short-term (1-7 days): Begin fungicide program, monitor progress",
+    "Long-term (2-4 weeks): Continue treatment, assess recovery"
+  ],
+  "environmental_factors": [
+    "Temperature: 20-30°C favors development",
+    "Humidity: >80% increases infection risk",
+    "Rainfall: Wet conditions promote spread",
+    "Season: Most active during monsoon/wet season"
+  ],
+  "spread_risk": "High/Moderate/Low - description of contagion potential",
+  "alternative_diagnoses": [
+    "Nutrient deficiency (nitrogen/potassium)",
+    "Environmental stress damage",
+    "Similar fungal infections"
   ]
 }
 
 For chemical recommendations:
-- Include specific fungicide/pesticide names and application rates
-- Mention timing and frequency
-- Always suggest organic alternatives for home gardeners
-- Include safety precautions
+- Include specific product names and application rates
+- Mention timing, frequency, and safety precautions
+- Always suggest organic alternatives
+- Consider resistance management
 
-Respond ONLY with valid JSON. Each action and prevention item must be a complete sentence string.`;
+Respond ONLY with valid JSON. Each array item must be a complete, informative string.`;
 
 class OllamaService {
   
@@ -83,7 +114,7 @@ class OllamaService {
   }
 
   async analyzeDisease(disease, confidence, scenario = 'farm_monitoring', severity_percent = null) {
-    const prompt = `Analyze this plant disease detection:
+    const prompt = `Analyze this plant disease detection with comprehensive pathological assessment:
 
 Detected Disease: ${disease}
 Confidence: ${(confidence * 100).toFixed(1)}%
@@ -91,14 +122,19 @@ ${severity_percent !== null ? `Infection Severity: ${severity_percent}% (detecte
 Scenario: ${scenario}
 
 Provide comprehensive disease management guidance including:
-1. Disease characteristics and impact
-2. Immediate treatment steps with specific chemical/organic options
-3. Application rates and timing for treatments
-4. Long-term prevention strategies
-5. Recommended fungicides/pesticides with product examples
-6. Safety precautions for chemical use
+1. Scientific classification and pathogen identification
+2. Detailed symptom description and disease progression
+3. Environmental causes and favorable conditions
+4. Immediate and long-term treatment protocols
+5. Specific chemical and organic control options with rates
+6. Prevention strategies and cultural practices
+7. Treatment timeline and monitoring schedule
+8. Environmental factors affecting disease development
+9. Risk assessment for disease spread
+10. Alternative diagnoses to consider
 
-Provide scenario-aware guidance in JSON format.`;
+Ensure all recommendations are evidence-based and include safety considerations.
+Provide scenario-appropriate guidance in JSON format.`;
 
     const response = await this.generate(prompt, { temperature: 0.6 });
     
@@ -111,47 +147,34 @@ Provide scenario-aware guidance in JSON format.`;
       
       const parsed = JSON.parse(jsonMatch[0]);
       
-      // Validate and sanitize actions and prevention arrays
-      if (parsed.actions && Array.isArray(parsed.actions)) {
-        parsed.actions = parsed.actions.map(action => {
-          if (typeof action === 'string') {
-            // Remove JSON string artifacts
-            return action.replace(/^[^:]*:\s*\{.*?\}\s*/, '').trim() || action;
-          }
-          if (typeof action === 'object' && action !== null) {
-            // Extract meaningful text from object
-            const step = action.step || action.action || action.treatment || '';
-            const details = action.details || action.description || action.option || '';
-            return details || step || JSON.stringify(action);
-          }
-          return String(action);
-        }).filter(a => a && a.length > 0);
-      }
+      // Validate and sanitize all arrays
+      const arrayFields = ['symptoms', 'causes', 'actions', 'prevention', 'treatment_timeline', 'environmental_factors', 'alternative_diagnoses'];
       
-      if (parsed.prevention && Array.isArray(parsed.prevention)) {
-        parsed.prevention = parsed.prevention.map(prev => {
-          if (typeof prev === 'string') {
-            // Remove JSON string artifacts
-            return prev.replace(/^[^:]*:\s*\{.*?\}\s*/, '').trim() || prev;
-          }
-          if (typeof prev === 'object' && prev !== null) {
-            // Extract meaningful text from object
-            const practice = prev.practice || prev.strategy || prev.tip || prev.treatment || '';
-            const details = prev.details || prev.description || '';
-            return practice || details || JSON.stringify(prev);
-          }
-          return String(prev);
-        }).filter(p => p && p.length > 0);
-      }
+      arrayFields.forEach(field => {
+        if (parsed[field] && Array.isArray(parsed[field])) {
+          parsed[field] = parsed[field].map(item => {
+            if (typeof item === 'string') {
+              return item.replace(/^[^:]*:\s*\{.*?\}\s*/, '').trim() || item;
+            }
+            if (typeof item === 'object' && item !== null) {
+              return Object.values(item).join(' ') || JSON.stringify(item);
+            }
+            return String(item);
+          }).filter(item => item && item.length > 0);
+        }
+      });
       
       // Validate required fields
-      if (!parsed.scenario || !parsed.disease || !parsed.severity || !parsed.summary || !parsed.actions || !parsed.prevention) {
-        throw new Error('Missing required fields in response');
+      const requiredFields = ['scenario', 'disease', 'severity', 'summary', 'actions', 'prevention'];
+      const missingFields = requiredFields.filter(field => !parsed[field]);
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
       
       return parsed;
     } catch (parseError) {
-      // Fallback response
+      console.error('Ollama parse error:', parseError.message);
       return this.getFallbackResponse(disease, confidence, scenario);
     }
   }

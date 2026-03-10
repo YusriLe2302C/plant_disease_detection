@@ -80,7 +80,12 @@ def detect_leaf(image):
     if boxes is None or len(boxes) == 0:
         return None
 
-    box = boxes.xyxy[0].detach().cpu().numpy()
+    boxes_xyxy = boxes.xyxy.detach().cpu().numpy()
+
+    areas = (boxes_xyxy[:,2]-boxes_xyxy[:,0]) * (boxes_xyxy[:,3]-boxes_xyxy[:,1])
+    largest_idx = np.argmax(areas)
+
+    box = boxes_xyxy[largest_idx]
 
     x1,y1,x2,y2 = map(int, box)
 
@@ -94,16 +99,35 @@ def segment_leaf(leaf):
 
     leaf_np = np.array(leaf)
 
-    hsv = cv2.cvtColor(leaf_np, cv2.COLOR_RGB2HSV)
+    h, w, _ = leaf_np.shape
 
-    lower = np.array([25,40,40])
-    upper = np.array([85,255,255])
+    mask = np.zeros((h, w), np.uint8)
 
-    mask = cv2.inRange(hsv, lower, upper)
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
 
-    segmented = cv2.bitwise_and(leaf_np, leaf_np, mask=mask)
+    # rectangle slightly inside the image
+    rect = (5, 5, w-10, h-10)
 
-    return segmented, mask
+    cv2.grabCut(
+        leaf_np,
+        mask,
+        rect,
+        bgdModel,
+        fgdModel,
+        5,
+        cv2.GC_INIT_WITH_RECT
+    )
+
+    mask2 = np.where(
+        (mask == 2) | (mask == 0),
+        0,
+        1
+    ).astype("uint8")
+
+    segmented = leaf_np * mask2[:, :, np.newaxis]
+
+    return segmented, mask2 * 255
 
 
 # ================= BACKGROUND NORMALIZATION =================

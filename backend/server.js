@@ -8,6 +8,7 @@ const espRoutes = require('./routes/esp_status');
 const basicRoutes = require('./routes/basic_routes');
 const uploadRoutes = require('./routes/upload');
 const aiRoutes = require('./routes/ai.routes');
+const translateRoutes = require('./routes/translate.routes');
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use('/api/analysis', espRoutes);
 app.use('/api/analysis', basicRoutes);
 app.use('/api/analysis', uploadRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/ollama', translateRoutes);
 
 app.get('/', (req, res) => {
   res.json({ 
@@ -52,7 +54,7 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port http://0.0.0.0:${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}`);
   console.log(`✅ All routes loaded successfully`);
   console.log(`🤖 AI-powered analysis enabled`);
