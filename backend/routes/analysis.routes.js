@@ -49,12 +49,9 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     const scenario = req.body.scenario || 'farm_monitoring';
 
     const prediction = await runPrediction(imagePath);
-    console.log('🔍 ML Prediction:', prediction);
     
-    // Ensure confidence is a valid number
     if (!prediction.confidence || isNaN(prediction.confidence)) {
-      prediction.confidence = 0.5; // Default fallback
-      console.log('⚠️ Using fallback confidence: 0.5');
+      prediction.confidence = 0.5;
     }
     
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -62,7 +59,6 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     let aiAnalysis = null;
     try {
       const severity_percent = prediction.severity_percent || null;
-      console.log(`🤖 Calling Ollama for: ${prediction.disease} (${(prediction.confidence * 100).toFixed(1)}%)`);
       
       aiAnalysis = await ollamaService.analyzeDisease(
         prediction.disease,
@@ -71,9 +67,6 @@ router.post('/upload', upload.single('image'), async (req, res) => {
         severity_percent
       );
       
-      console.log('✅ Ollama response received');
-      
-      // Sanitize actions and prevention to ensure they are string arrays
       if (aiAnalysis.actions && Array.isArray(aiAnalysis.actions)) {
         aiAnalysis.actions = aiAnalysis.actions.map(action => 
           typeof action === 'string' ? action : JSON.stringify(action)
@@ -85,8 +78,6 @@ router.post('/upload', upload.single('image'), async (req, res) => {
         );
       }
     } catch (aiError) {
-      console.error('❌ AI analysis failed:', aiError.message);
-      console.log('📋 Using fallback response');
       aiAnalysis = ollamaService.getFallbackResponse(
         prediction.disease,
         prediction.confidence,
@@ -114,7 +105,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     try {
       savedScan = await Scan.create(scanData);
     } catch (dbError) {
-      console.error('Database save failed:', dbError);
+      // Silent fail
     }
 
     return res.json({
@@ -122,6 +113,7 @@ router.post('/upload', upload.single('image'), async (req, res) => {
       message: 'Analysis complete',
       disease: prediction.disease,
       confidence: prediction.confidence,
+      top3_predictions: prediction.top3_predictions,
       yolo_confidence: prediction.yolo_confidence,
       annotated_image: prediction.annotated_image,
       processed_image: prediction.processed_image,
@@ -134,8 +126,6 @@ router.post('/upload', upload.single('image'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Upload error:', error);
-    
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }

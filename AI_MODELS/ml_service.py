@@ -21,7 +21,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("🚀 Using device:", DEVICE)
 
 # ================= LOAD CLASS MAP =================
-with open('class_indices.json', 'r') as f:
+with open('model_pt2/class_indices.json', 'r') as f:
     class_indices = json.load(f)
 
 idx_to_class = {v: k for k, v in class_indices.items()}
@@ -29,17 +29,26 @@ num_classes = len(class_indices)
 
 print("📊 Total classes loaded:", num_classes)
 
-# ================= LOAD MODEL =================
-def load_model():
-    model = create_model('efficientnet_b0', pretrained=False, num_classes=num_classes)
-    model.load_state_dict(torch.load('best_model.pth', map_location=DEVICE))
-    model.to(DEVICE)
-    model.eval()
-    print("✅ Loaded model: best_model.pth")
-    return model
+# ================= LOAD MODELS =================
+def load_models():
+    # Load Top-1 Model
+    model_top1 = create_model('efficientnet_b0', pretrained=False, num_classes=num_classes)
+    model_top1.load_state_dict(torch.load('model_pt2/best_model_top1.pth', map_location=DEVICE))
+    model_top1.to(DEVICE)
+    model_top1.eval()
+    print("✅ Loaded Top-1 model: best_model_top1.pth")
+    
+    # Load Top-3 Model
+    model_top3 = create_model('efficientnet_b0', pretrained=False, num_classes=num_classes)
+    model_top3.load_state_dict(torch.load('model_pt2/best_model_top3.pth', map_location=DEVICE))
+    model_top3.to(DEVICE)
+    model_top3.eval()
+    print("✅ Loaded Top-3 model: best_model_top3.pth")
+    
+    return model_top1, model_top3
 
-model = load_model()
-print("✅ Model ready")
+model_top1, model_top3 = load_models()
+print("✅ Both models ready")
 
 # # ================= PREPROCESSING =================
 def remove_background_and_enhance(image_bgr):
@@ -111,12 +120,31 @@ def predict():
         img_pil = Image.fromarray(image_rgb)
         img_tensor = transform(img_pil).unsqueeze(0).to(DEVICE)
 
+        # Get Top-1 Prediction
         with torch.no_grad():
-            outputs = model(img_tensor)
-            probs = F.softmax(outputs, dim=1)
-            confidence, predicted_class_idx = torch.max(probs, 1)
+            outputs_top1 = model_top1(img_tensor)
+            probs_top1 = F.softmax(outputs_top1, dim=1)
+            confidence_top1, predicted_class_idx_top1 = torch.max(probs_top1, 1)
 
-        disease = idx_to_class[int(predicted_class_idx.item())]
+        # Get Top-3 Predictions
+        with torch.no_grad():
+            outputs_top3 = model_top3(img_tensor)
+            probs_top3 = F.softmax(outputs_top3, dim=1)
+            top3_probs, top3_indices = torch.topk(probs_top3, 3, dim=1)
+
+        # Primary disease (Top-1)
+        disease = idx_to_class[int(predicted_class_idx_top1.item())]
+        
+        # Top-3 predictions
+        top3_predictions = []
+        for i in range(3):
+            class_idx = int(top3_indices[0][i].item())
+            prob = float(top3_probs[0][i].item())
+            class_name = idx_to_class[class_idx]
+            top3_predictions.append({
+                'disease': class_name,
+                'confidence': round(prob, 4)
+            })
         
         # Encode original image
         _, buffer = cv2.imencode('.jpg', image_bgr, [cv2.IMWRITE_JPEG_QUALITY, 100])
@@ -124,8 +152,9 @@ def predict():
 
         return jsonify({
             'disease': disease,
-            'confidence': round(float(confidence.item()), 4),
-            'model': 'EfficientNetB0-PyTorch',
+            'confidence': round(float(confidence_top1.item()), 4),
+            'top3_predictions': top3_predictions,
+            'model': 'EfficientNetB0-PyTorch-Dual',
             'device': str(DEVICE),
             'annotated_image': annotated_base64
         })

@@ -514,10 +514,29 @@ const ResultPage = () => {
                 <div className="space-y-6">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-gray-600">Disease</span>
+                      <span className="text-gray-600">Primary Disease</span>
                       <span className="font-semibold text-xl text-gray-900">{result.disease || 'Unknown'}</span>
                     </div>
                   </div>
+
+                  {/* Top 3 Predictions */}
+                  {result.top3_predictions && result.top3_predictions.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold text-gray-700 mb-3">Top 3 Predictions</h4>
+                      <div className="space-y-3">
+                        {result.top3_predictions.map((prediction, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <span className="text-gray-700 font-medium">
+                              {idx + 1}. {prediction.class.replace(/_/g, ' ')}
+                            </span>
+                            <span className="font-semibold text-lg text-blue-600">
+                              {prediction.confidence_percent}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
@@ -1004,8 +1023,4 @@ const ResultPage = () => {
     </div>
   );
 };
-
 export default ResultPage;
-
-
-

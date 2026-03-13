@@ -24,7 +24,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", DEVICE)
 
 # ================= LOAD CLASS MAP =================
-with open(os.path.join(BASE_DIR, "class_indices.json")) as f:
+with open(os.path.join(BASE_DIR, "model_pt2", "class_indices.json")) as f:
     class_indices = json.load(f)
 
 idx_to_class = {v: k for k, v in class_indices.items()}
@@ -35,28 +35,41 @@ print("Total classes:", num_classes)
 # ================= LOAD YOLO MODEL =================
 leaf_detector = YOLO(os.path.join(BASE_DIR, "leaf_detector.pt"))
 
-# ================= LOAD EFFICIENTNET =================
-def load_classifier():
-
-    model = create_model(
+# ================= LOAD EFFICIENTNET MODELS =================
+def load_models():
+    # Top-1 Model
+    model_top1 = create_model(
         "efficientnet_b0",
         pretrained=False,
         num_classes=num_classes
     )
-
-    model.load_state_dict(
+    model_top1.load_state_dict(
         torch.load(
-            os.path.join(BASE_DIR, "best_model.pth"),
+            os.path.join(BASE_DIR, "model_pt2", "best_model_top1.pth"),
             map_location=DEVICE
         )
     )
+    model_top1.to(DEVICE)
+    model_top1.eval()
 
-    model.to(DEVICE)
-    model.eval()
+    # Top-3 Model
+    model_top3 = create_model(
+        "efficientnet_b0",
+        pretrained=False,
+        num_classes=num_classes
+    )
+    model_top3.load_state_dict(
+        torch.load(
+            os.path.join(BASE_DIR, "model_pt2", "best_model_top3.pth"),
+            map_location=DEVICE
+        )
+    )
+    model_top3.to(DEVICE)
+    model_top3.eval()
 
-    return model
+    return model_top1, model_top3
 
-classifier = load_classifier()
+model_top1, model_top3 = load_models()
 
 print("Models loaded successfully")
 
@@ -144,36 +157,55 @@ def create_lab_style_image(segmented, mask):
 
 # ================= CLASSIFICATION =================
 def classify_leaf(image):
-
     img = Image.fromarray(image.astype("uint8"))
-
     tensor = transform(img).unsqueeze(0).to(DEVICE)
 
     with torch.no_grad():
+        # Top-1 Model Predictions
+        outputs_top1 = model_top1(tensor)
+        probs_top1 = F.softmax(outputs_top1, dim=1)
+        top1_pred = torch.topk(probs_top1, 3)
+        top1_indices = top1_pred.indices[0].cpu().numpy()
+        top1_scores = top1_pred.values[0].cpu().numpy()
 
-        outputs = classifier(tensor)
+        # Top-3 Model Predictions
+        outputs_top3 = model_top3(tensor)
+        probs_top3 = F.softmax(outputs_top3, dim=1)
+        top3_pred = torch.topk(probs_top3, 3)
+        top3_indices = top3_pred.indices[0].cpu().numpy()
+        top3_scores = top3_pred.values[0].cpu().numpy()
 
-        probs = F.softmax(outputs, dim=1)
+        # Combined Model (average probabilities)
+        combined_probs = (probs_top1 + probs_top3) / 2
+        combined_pred = torch.topk(combined_probs, 3)
+        combined_indices = combined_pred.indices[0].cpu().numpy()
+        combined_scores = combined_pred.values[0].cpu().numpy()
 
-        # TOP 3 predictions
-        top3 = torch.topk(probs, 3)
-
-        indices = top3.indices[0].cpu().numpy()
-        scores = top3.values[0].cpu().numpy()
-
-    top_predictions = []
-
+    # Format all predictions
+    top1_predictions = []
     for i in range(3):
-
-        top_predictions.append({
-            "class": idx_to_class[int(indices[i])],
-            "confidence_percent": round(float(scores[i]) * 100, 2)
+        top1_predictions.append({
+            "class": idx_to_class[int(top1_indices[i])],
+            "confidence_percent": round(float(top1_scores[i]) * 100, 2)
         })
 
-    best_class = idx_to_class[int(indices[0])]
-    best_conf = float(scores[0])
+    top3_predictions = []
+    for i in range(3):
+        top3_predictions.append({
+            "class": idx_to_class[int(top3_indices[i])],
+            "confidence_percent": round(float(top3_scores[i]) * 100, 2)
+        })
 
-    return best_class, best_conf, top_predictions
+    combined_predictions = []
+    for i in range(3):
+        combined_predictions.append({
+            "class": idx_to_class[int(combined_indices[i])],
+            "confidence_percent": round(float(combined_scores[i]) * 100, 2)
+        })
+
+    return {
+        "top3_predictions": top3_predictions
+    }
 
 
 # ================= MAIN PIPELINE =================
@@ -208,7 +240,7 @@ def predict():
     lab_leaf = create_lab_style_image(segmented, mask)
 
     # Step 4 → Classify disease
-    disease, confidence, top_predictions = classify_leaf(lab_leaf)
+    results = classify_leaf(lab_leaf)
 
     # Encode processed image
     processed_pil = Image.fromarray(lab_leaf.astype('uint8'))
@@ -217,18 +249,18 @@ def predict():
     processed_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
     return jsonify({
-        "disease": disease,
-        "confidence": round(confidence, 4),
-        "model": "EfficientNetB0-PyTorch",
+        "disease": results["top3_predictions"][0]["class"],
+        "confidence": round(results["top3_predictions"][0]["confidence_percent"] / 100, 4),
+        "model": "EfficientNetB0-PyTorch (Top3 Model)",
         "device": str(DEVICE),
         "processed_image": processed_base64,
         "pipeline": [
             "YOLO leaf detection",
             "Leaf segmentation", 
             "Background normalization",
-            "EfficientNet classification"
+            "EfficientNet top3 classification"
         ],
-        "top3_predictions": top_predictions
+        "top3_predictions": results["top3_predictions"]
     })
 
 
